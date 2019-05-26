@@ -1,0 +1,23 @@
+apiVersion: uiapi.com/v1alpha1
+kind: Uapi
+metadata:
+  name: uapi
+spec:
+  namespace: "uapi"
+  ui:
+    size: 1
+    name: "ui"
+    service_node_port: 30080
+    api_url: "http://127.0.0.1:30081"
+    image: "docker-registry.default.svc:5000/uapi/ui:latest"
+  api:
+    size: 1
+    name: "uiapi"
+    service_node_port: 30081
+    conf_secret_name: "uapisecret"
+    image: "docker-registry.default.svc:5000/uapi/uapi:latest"
+  db:
+    image: "registry.redhat.io/rhscl/mongodb-36-rhel7:latest"
+    port: 27017
+    host: "mongo"
+    name: "uapi"
