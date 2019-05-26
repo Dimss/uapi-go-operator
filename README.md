@@ -24,17 +24,17 @@ docker push docker.io/dimssss/uapi-operator:TAG
 ### Deploy CRD & CR 
 ```bash
 # CRD
-kubectl create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
+oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
 # CR
-kubectl create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
+oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
 ```
 
 ### Cleanup
 ```bash
 # CR
-kubectl delete -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
+oc delete -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
 # CRD
-kubectl delete -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
+oc delete -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
 ```
 
 Customize CR
