@@ -2,7 +2,16 @@
 
 ### Build & Run Operator locally 
 ```bash
+# CRD
+oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
+# CR
+oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
+# Run operator locally 
 operator-sdk up local --namespace=uapi
+# Cleanup CRD
+oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
+# Cleanup CR
+oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
 ```
 
 ### Debug Operator locally 
