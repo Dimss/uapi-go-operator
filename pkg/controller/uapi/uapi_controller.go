@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -17,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"strconv"
 )
 
 var log = logf.Log.WithName("controller_uapi")
@@ -103,6 +105,9 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 	// Define a new Pod object
 	mongoDeployment := newMongoDbDeployment(instance)
 	mongoService := newMongoService(instance)
+	apiSecret := newApiSecret(instance)
+	apiDeployment := newApiDeployment(instance)
+	apiService := newApiService(instance)
 
 	// Set Uapi instance as the owner and controller
 	if err := controllerutil.SetControllerReference(instance, mongoDeployment, r.scheme); err != nil {
@@ -111,6 +116,21 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// Set Uapi instance as the owner and controller
 	if err := controllerutil.SetControllerReference(instance, mongoService, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Set Uapi instance as the owner and controller
+	if err := controllerutil.SetControllerReference(instance, apiSecret, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Set Uapi instance as the owner and controller
+	if err := controllerutil.SetControllerReference(instance, apiDeployment, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Set Uapi instance as the owner and controller
+	if err := controllerutil.SetControllerReference(instance, apiService, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -129,6 +149,21 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 			return reconcile.Result{}, err
 		}
 
+		err = r.client.Create(context.TODO(), apiSecret)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Create(context.TODO(), apiDeployment)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Create(context.TODO(), apiService)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
 		// Pod created successfully - don't requeue
 		return reconcile.Result{}, nil
 	} else if err != nil {
@@ -142,12 +177,12 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 func newPodForDB(cr *uiapiv1alpha1.Uapi) corev1.PodTemplateSpec {
 	labels := map[string]string{
-		"app": cr.Spec.Db.Name,
+		"app": cr.Spec.Db.Host,
 	}
 
 	return corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Db.Name + "-pod",
+			Name:      cr.Spec.Db.Host + "-pod",
 			Namespace: cr.Spec.Namespace,
 			Labels:    labels,
 		},
@@ -170,16 +205,137 @@ func newPodForDB(cr *uiapiv1alpha1.Uapi) corev1.PodTemplateSpec {
 	}
 }
 
+func newPodForApi(cr *uiapiv1alpha1.Uapi) corev1.PodTemplateSpec {
+	labels := map[string]string{
+		"app": cr.Spec.Api.Name,
+	}
+
+	envs := []corev1.EnvVar{
+		{
+			Name: "PROFILE",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cr.Spec.Api.ConfSecretName},
+					Key:                  "profile",
+				},
+			},
+		},
+		{
+			Name: "DB_HOST",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cr.Spec.Api.ConfSecretName},
+					Key:                  "db_host",
+				},
+			},
+		},
+		{
+			Name: "DB_PORT",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cr.Spec.Api.ConfSecretName},
+					Key:                  "db_port",
+				},
+			},
+		},
+		{
+			Name: "DB_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cr.Spec.Api.ConfSecretName},
+					Key:                  "db_name",
+				},
+			},
+		},
+		{
+			Name: "DB_USER",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cr.Spec.Api.ConfSecretName},
+					Key:                  "db_host",
+				},
+			},
+		},
+		{
+			Name: "DB_PASS",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: cr.Spec.Api.ConfSecretName},
+					Key:                  "db_host",
+				},
+			},
+		},
+	}
+	readinessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/ready",
+				Port: intstr.IntOrString{IntVal: int32(8080)},
+			},
+		},
+		InitialDelaySeconds: 3,
+		PeriodSeconds:       3,
+	}
+
+	livenessProbe := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/healthy",
+				Port: intstr.IntOrString{IntVal: int32(8080)},
+			},
+		},
+		InitialDelaySeconds: 3,
+		PeriodSeconds:       3,
+	}
+
+	return corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.Db.Name + "-pod",
+			Namespace: cr.Spec.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:            cr.Spec.Api.Name,
+					Image:           cr.Spec.Api.Image,
+					ImagePullPolicy: corev1.PullAlways,
+					Ports:           []corev1.ContainerPort{{ContainerPort: cr.Spec.Db.Port}},
+					Env:             envs,
+					ReadinessProbe:  readinessProbe,
+					LivenessProbe:   livenessProbe,
+				},
+			},
+		},
+	}
+}
+
 func newMongoService(cr *uiapiv1alpha1.Uapi) *corev1.Service {
 
 	service := corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.Db.Name,
+			Name:      cr.Spec.Db.Host,
 			Namespace: cr.Spec.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app": cr.Spec.Db.Name},
+			Selector: map[string]string{"app": cr.Spec.Db.Host},
 			Ports:    []corev1.ServicePort{{Name: cr.Spec.Db.Name, Port: cr.Spec.Db.Port}},
+		},
+	}
+	return &service
+}
+
+func newApiService(cr *uiapiv1alpha1.Uapi) *corev1.Service {
+
+	service := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.Api.Name,
+			Namespace: cr.Spec.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"app": cr.Spec.Api.Name},
+			Ports:    []corev1.ServicePort{{Name: cr.Spec.Api.Name, Port: 8080, NodePort: cr.Spec.Api.ServiceNodePort}},
+			Type:     corev1.ServiceTypeNodePort,
 		},
 	}
 	return &service
@@ -189,17 +345,55 @@ func newMongoDbDeployment(cr *uiapiv1alpha1.Uapi) (deployment *appsv1.Deployment
 	var size int32
 	size = 1
 	labels := map[string]string{
-		"app": cr.Spec.Db.Name,
+		"app": cr.Spec.Db.Host,
 	}
 	metadata := metav1.ObjectMeta{
 		Namespace: cr.Spec.Namespace,
-		Name:      cr.Spec.Db.Name,
+		Name:      cr.Spec.Db.Host,
 		Labels:    labels,
 	}
 	spec := appsv1.DeploymentSpec{
 		Replicas: &size,
 		Selector: &metav1.LabelSelector{MatchLabels: labels},
 		Template: newPodForDB(cr),
+	}
+	deployment = &appsv1.Deployment{
+		ObjectMeta: metadata,
+		Spec:       spec,
+	}
+	return
+}
+
+func newApiSecret(cr *uiapiv1alpha1.Uapi) (secret *corev1.Secret) {
+
+	secret = &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: cr.Spec.Api.ConfSecretName, Namespace: cr.Spec.Namespace},
+		Type:       corev1.SecretTypeOpaque,
+		StringData: map[string]string{
+			"profile": "prod",
+			"db_host": cr.Spec.Db.Host,
+			"db_port": strconv.Itoa(int(cr.Spec.Db.Port)),
+			"db_name": cr.Spec.Db.Name,
+		},
+	}
+	return
+}
+
+func newApiDeployment(cr *uiapiv1alpha1.Uapi) (deployment *appsv1.Deployment) {
+	var size int32
+	size = 1
+	labels := map[string]string{
+		"app": cr.Spec.Api.Name,
+	}
+	metadata := metav1.ObjectMeta{
+		Namespace: cr.Spec.Namespace,
+		Name:      cr.Spec.Api.Name,
+		Labels:    labels,
+	}
+	spec := appsv1.DeploymentSpec{
+		Replicas: &size,
+		Selector: &metav1.LabelSelector{MatchLabels: labels},
+		Template: newPodForApi(cr),
 	}
 	deployment = &appsv1.Deployment{
 		ObjectMeta: metadata,
