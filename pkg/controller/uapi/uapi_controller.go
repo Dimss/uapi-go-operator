@@ -108,6 +108,8 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 	apiSecret := newApiSecret(instance)
 	apiDeployment := newApiDeployment(instance)
 	apiService := newApiService(instance)
+	uiService := newUiService(instance)
+	uiDeployment := newUiDeployment(instance)
 
 	// Set Uapi instance as the owner and controller
 	if err := controllerutil.SetControllerReference(instance, mongoDeployment, r.scheme); err != nil {
@@ -131,6 +133,16 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 
 	// Set Uapi instance as the owner and controller
 	if err := controllerutil.SetControllerReference(instance, apiService, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Set Uapi instance as the owner and controller
+	if err := controllerutil.SetControllerReference(instance, uiService, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Set Uapi instance as the owner and controller
+	if err := controllerutil.SetControllerReference(instance, uiDeployment, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -160,6 +172,16 @@ func (r *ReconcileUapi) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 
 		err = r.client.Create(context.TODO(), apiService)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Create(context.TODO(), uiService)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Create(context.TODO(), uiDeployment)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -300,7 +322,7 @@ func newPodForApi(cr *uiapiv1alpha1.Uapi) corev1.PodTemplateSpec {
 					Name:            cr.Spec.Api.Name,
 					Image:           cr.Spec.Api.Image,
 					ImagePullPolicy: corev1.PullAlways,
-					Ports:           []corev1.ContainerPort{{ContainerPort: cr.Spec.Db.Port}},
+					Ports:           []corev1.ContainerPort{{ContainerPort: int32(8080)}},
 					Env:             envs,
 					ReadinessProbe:  readinessProbe,
 					LivenessProbe:   livenessProbe,
@@ -319,7 +341,7 @@ func newMongoService(cr *uiapiv1alpha1.Uapi) *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"app": cr.Spec.Db.Host},
-			Ports:    []corev1.ServicePort{{Name: cr.Spec.Db.Name, Port: cr.Spec.Db.Port}},
+			Ports:    []corev1.ServicePort{{Name: "mongo", Port: cr.Spec.Db.Port}},
 		},
 	}
 	return &service
@@ -334,7 +356,7 @@ func newApiService(cr *uiapiv1alpha1.Uapi) *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"app": cr.Spec.Api.Name},
-			Ports:    []corev1.ServicePort{{Name: cr.Spec.Api.Name, Port: 8080, NodePort: cr.Spec.Api.ServiceNodePort}},
+			Ports:    []corev1.ServicePort{{Name: "http", Port: 8080, NodePort: cr.Spec.Api.ServiceNodePort}},
 			Type:     corev1.ServiceTypeNodePort,
 		},
 	}
@@ -379,6 +401,33 @@ func newApiSecret(cr *uiapiv1alpha1.Uapi) (secret *corev1.Secret) {
 	return
 }
 
+func newPodForUi(cr *uiapiv1alpha1.Uapi) corev1.PodTemplateSpec {
+	labels := map[string]string{
+		"app": cr.Spec.Ui.Name,
+	}
+
+	return corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.Ui.Name + "-pod",
+			Namespace: cr.Spec.Namespace,
+			Labels:    labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:            cr.Spec.Ui.Name,
+					Image:           cr.Spec.Ui.Image,
+					ImagePullPolicy: corev1.PullAlways,
+					Ports:           []corev1.ContainerPort{{ContainerPort: int32(3000)}},
+					Env: []corev1.EnvVar{
+						{Name: "API_URL", Value: cr.Spec.Ui.ApiUrl},
+					},
+				},
+			},
+		},
+	}
+}
+
 func newApiDeployment(cr *uiapiv1alpha1.Uapi) (deployment *appsv1.Deployment) {
 	var size int32
 	size = 1
@@ -394,6 +443,45 @@ func newApiDeployment(cr *uiapiv1alpha1.Uapi) (deployment *appsv1.Deployment) {
 		Replicas: &size,
 		Selector: &metav1.LabelSelector{MatchLabels: labels},
 		Template: newPodForApi(cr),
+	}
+	deployment = &appsv1.Deployment{
+		ObjectMeta: metadata,
+		Spec:       spec,
+	}
+	return
+}
+
+func newUiService(cr *uiapiv1alpha1.Uapi) *corev1.Service {
+
+	service := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cr.Spec.Ui.Name,
+			Namespace: cr.Spec.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"app": cr.Spec.Ui.Name},
+			Ports:    []corev1.ServicePort{{Name: "http", Port: 3000, NodePort: cr.Spec.Ui.ServiceNodePort}},
+			Type:     corev1.ServiceTypeNodePort,
+		},
+	}
+	return &service
+}
+
+func newUiDeployment(cr *uiapiv1alpha1.Uapi) (deployment *appsv1.Deployment) {
+	var size int32
+	size = 1
+	labels := map[string]string{
+		"app": cr.Spec.Ui.Name,
+	}
+	metadata := metav1.ObjectMeta{
+		Namespace: cr.Spec.Namespace,
+		Name:      cr.Spec.Ui.Name,
+		Labels:    labels,
+	}
+	spec := appsv1.DeploymentSpec{
+		Replicas: &size,
+		Selector: &metav1.LabelSelector{MatchLabels: labels},
+		Template: newPodForUi(cr),
 	}
 	deployment = &appsv1.Deployment{
 		ObjectMeta: metadata,
