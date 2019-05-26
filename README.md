@@ -9,9 +9,9 @@ operator-sdk up local --namespace=uapi
 # CR
 oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
 # Cleanup CR
-oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
+oc delete -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_cr.yaml
 # Cleanup CRD
-oc create -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
+oc delete -f https://raw.githubusercontent.com/Dimss/uapi-go-operator/master/deploy/crds/uiapi_v1alpha1_uapi_crd.yaml
 ```
 
 ### Debug Operator locally 
