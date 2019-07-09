@@ -9,13 +9,13 @@ spec:
     name: "ui"
     serviceNodePort: 30080
     apiUrl: "http://127.0.0.1:30081"
-    image: "docker-registry.default.svc:5000/uapi/ui:latest"
+    image: "docker.io/dimssss/upapi-ui:latest"
   api:
     size: 1
     name: "api"
     serviceNodePort: 30081
     confSecretName: "uapisecret"
-    image: "docker-registry.default.svc:5000/uapi/uapi:latest"
+    image: "docker.io/dimssss/upapi:latest"
   db:
     image: "registry.redhat.io/rhscl/mongodb-36-rhel7:latest"
     port: 27017
